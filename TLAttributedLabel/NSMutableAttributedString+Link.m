@@ -15,18 +15,18 @@
 #import "TLAttributedImage.h"
 #import <objc/runtime.h>
 
-// 检查URL/@/##/手机号
-static NSString *const pattern = @"(@([\u4e00-\u9fa5A-Z0-9a-z(é|ë|ê|è|à|â|ä|á|ù|ü|û|ú|ì|ï|î|í)._-]+))|(#[\u4e00-\u9fa5A-Z0-9a-z(é|ë|ê|è|à|â|ä|á|ù|ü|û|ú|ì|ï|î|í)._-]+#)|((http[s]{0,1}|ftp)://[a-zA-Z0-9\\.\\-]+\\.([a-zA-Z]{2,4})(:\\d+)?(/[a-zA-Z0-9\\.\\-~!@#$%^&*+?:_/=<>]*)?)|(www.[a-zA-Z0-9\\.\\-]+\\.([a-zA-Z]{2,4})(:\\d+)?(/[a-zA-Z0-9\\.\\-~!@#$%^&*+?:_/=<>]*)?)";
+// 检查a标签/URL
+static NSString *const pattern = @"(<a.*?[^<]+</a>)|((http[s]{0,1}|ftp)://[a-zA-Z0-9\\.\\-]+\\.([a-zA-Z]{2,4})(:\\d+)?(/[a-zA-Z0-9\\.\\-~!@#$%^&*+?:_/=<>]*)?)|(www.[a-zA-Z0-9\\.\\-]+\\.([a-zA-Z]{2,4})(:\\d+)?(/[a-zA-Z0-9\\.\\-~!@#$%^&*+?:_/=<>]*)?)|<img.*?>";
 
 @implementation NSMutableAttributedString (Link)
-static char urlAttStringKey;
+static char imgAttStringKey;
 
-- (NSMutableAttributedString *)urlAttString {
-    return objc_getAssociatedObject(self, &urlAttStringKey);
+- (NSMutableAttributedString *)imgAttString {
+    return objc_getAssociatedObject(self, &imgAttStringKey);
 }
 
-- (void)setUrlAttString:(NSMutableAttributedString *)urlAttString {
-    objc_setAssociatedObject(self, &urlAttStringKey, urlAttString, OBJC_ASSOCIATION_COPY);
+- (void)setImgAttString:(NSMutableAttributedString *)imgAttString {
+    objc_setAssociatedObject(self, &imgAttStringKey, imgAttString, OBJC_ASSOCIATION_COPY);
 }
 
 // 检查并处理链接
@@ -44,67 +44,101 @@ static char urlAttStringKey;
         NSString *txt = [self.string substringWithRange:result.range];
         TLAttributedLink *linkData = [[TLAttributedLink alloc] init];
         linkData.title = txt;
+        linkData.url = txt;
         [links addObject:linkData];
-        
-        if (!([linkData.title hasPrefix:@"#"] || [linkData.title hasPrefix:@"@"])) {
-            linkData.url = txt;
-        }
     }];
     
+    
+    NSUInteger newlocation = 0;
     // 处理链接
-    for (TLAttributedLink *linkData in links) {        
-        NSRange range = [self.string rangeOfString:linkData.title];
-        linkData.range = range;
-
-        // 设置颜色和字体大小
-        [self setFont:font range:range];
-        [self setTextColor:linkColor range:range];
+    for (TLAttributedLink *linkData in links) {
         
-        if (!([linkData.title hasPrefix:@"#"] || [linkData.title hasPrefix:@"@"]) && !showUrl) {
-            NSMutableAttributedString *urlAttString = [self addUrlAttStringWithLinkData:linkData font:font linkColor:linkColor  images:images];
-
+        NSString *text = linkData.title;
+        // 用于处理当title相同时的情况
+        NSRange range = [self.string rangeOfString:text options:NSLiteralSearch range:NSMakeRange(newlocation, self.string.length - newlocation)];
+        linkData.range = range;
+        // 设置颜色和字体大小
+        [self setFont:font range:linkData.range];
+        [self setTextColor:linkColor range:linkData.range];
+        
+        if ([text hasPrefix:@"<a"]) {
+            NSString *string = [self removeSignWithStr:text];
+            NSArray *array = [string componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"<>"]];
+            for (int i = 0; i<array.count; i++) {
+                NSString *str = array[i];
+                if ([str isEqualToString:@"/a"]) {
+                    if (showUrl)
+                        linkData.title = text;
+                    else
+                        linkData.title = array[(i-1)>0?(i-1):0];
+                    
+                    NSString *url = array[(i-2)>0?(i-2):0];
+                    NSRange range = [url rangeOfString:@"="];
+                    linkData.url = [url substringFromIndex:range.location+1];
+                    break;
+                }
+            }
+            
+            NSMutableAttributedString *urlAttString = [self addUrlAttStringWithLinkData:linkData font:font linkColor:linkColor images:images];
             [self replaceCharactersInRange:range withAttributedString:urlAttString];
-            linkData.title = TLReplaceURLTitle;
+            linkData.range = NSMakeRange(range.location + 1, urlAttString.length - 2);
+        }else if([text hasPrefix:@"<img"]){
+            NSString *string = [self removeSignWithStr:text];
+            NSArray *array = [string componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"= >"]];
+            for (int i= 0; i<array.count; i++) {
+                if ([array[i] isEqualToString:@"src"]) {
+                    NSString *str = array[(i+2)<array.count?(i+2):0];
+                    linkData.url = str;
+                    linkData.title = TLReplaceURLTitle;
+                    break;
+                }
+            }
+            NSMutableAttributedString *urlAttString = [self addImgAttStringWithLinkData:linkData font:font linkColor:linkColor images:images];
+            [self replaceCharactersInRange:range withAttributedString:urlAttString];
             linkData.range = NSMakeRange(range.location + 1, urlAttString.length - 2);
         }
+        
+        newlocation = NSMaxRange(linkData.range);
     }
     
     return links;
 }
 
-- (NSMutableAttributedString *)addUrlAttStringWithLinkData:(TLAttributedLink *)linkData
-                                                      font:(UIFont *)font
-                                                 linkColor:(UIColor *)linkColor
-                                                    images:(NSMutableArray *)images {
-    if (!self.urlAttString) {
-        // 设置图片属性
-        TLAttributedImage *imageData = [[TLAttributedImage alloc] init];
-        imageData.imageName = TLReplaceURLImageName;
-        imageData.type = TLImagePNGTppe;
-        imageData.imageSize = CGSizeMake(font.pointSize, font.pointSize);
-        imageData.fontRef = CTFontCreateWithName((CFStringRef)font.fontName, font.pointSize, NULL);
-        imageData.imageAlignment = TLImageAlignmentCenter;
-        imageData.imageMargin = UIEdgeInsetsZero;
-        [images addObject:imageData];
-        
-        // 创建图片带属性字符串
-        NSMutableAttributedString *attributedString = [[NSMutableAttributedString alloc] initWithString:@" "];
-        NSAttributedString *imageAttString = [self createImageAttributedString:imageData];
-        [attributedString appendAttributedString:imageAttString];
-
-        // 生成完成的链接
-        NSMutableAttributedString *attString = [[NSMutableAttributedString alloc] initWithString:TLReplaceURLTitle];
-        [attributedString appendAttributedString:attString];
-        [attributedString appendAttributedString:[[NSMutableAttributedString alloc] initWithString:@" "]];
-                
-        // 设置颜色和字体大小
-        [attributedString setFont:font];
-        [attributedString setTextColor:linkColor];
-        
-        self.urlAttString = [attributedString mutableCopy];
-    }
+// a标签
+- (NSMutableAttributedString *)addUrlAttStringWithLinkData:(TLAttributedLink *)linkData font:(UIFont *)font linkColor:(UIColor *)linkColor images:(NSMutableArray *)images{
+    // 设置图片属性
+    TLAttributedImage *imageData = [[TLAttributedImage alloc] init];
+    imageData.imageName = TLReplaceURLImageName;
+    imageData.type = TLImagePNGTppe;
+    imageData.imageSize = CGSizeMake(font.pointSize, font.pointSize);
+    imageData.fontRef = CTFontCreateWithName((CFStringRef)font.fontName, font.pointSize, NULL);
+    imageData.imageAlignment = TLImageAlignmentCenter;
+    imageData.imageMargin = UIEdgeInsetsZero;
+    [images addObject:imageData];
     
-    return self.urlAttString;
+    // 创建图片带属性字符串
+    NSMutableAttributedString *attributedString = [[NSMutableAttributedString alloc] initWithString:@" "];
+    NSAttributedString *imageAttString = [self createImageAttributedString:imageData];
+    [attributedString appendAttributedString:imageAttString];
+    
+    // 生成完成的链接
+    NSMutableAttributedString *attString = [[NSMutableAttributedString alloc] initWithString:linkData.title];
+    [attributedString appendAttributedString:attString];
+    
+    [attributedString appendAttributedString:[[NSAttributedString alloc]initWithString:@" "]];
+    
+    // 设置颜色和字体大小
+    [attributedString setFont:font];
+    [attributedString setTextColor:linkColor];
+    
+    return attributedString;
+}
+// img标签
+- (NSMutableAttributedString *)addImgAttStringWithLinkData:(TLAttributedLink *)linkData font:(UIFont *)font linkColor:(UIColor *)linkColor images:(NSMutableArray *)images{
+    if (!self.imgAttString) {
+        self.imgAttString = [self addUrlAttStringWithLinkData:linkData font:font linkColor:linkColor images:images];
+    }
+    return self.imgAttString;
 }
 
 #pragma mark -
@@ -132,7 +166,7 @@ static NSUInteger kLocation = 0;
                  string:(NSString *)string
             customLinks:(NSMutableArray *)customLinks {
     NSRange range = [string rangeOfString:link];
-
+    
     if (range.location != NSNotFound) {
         TLAttributedLink *linkData = [[TLAttributedLink alloc] init];
         linkData.title = link;
@@ -146,4 +180,11 @@ static NSUInteger kLocation = 0;
     }
 }
 
+- (NSString *)removeSignWithStr:(NSString *)str
+{
+    NSString *txt = [str copy];
+    txt = [txt stringByReplacingOccurrencesOfString:@"\"" withString:@" "];
+    txt = [txt stringByReplacingOccurrencesOfString:@"\'" withString:@" "];
+    return txt;
+}
 @end

@@ -25,12 +25,14 @@
     self.title = @"TLAttributedLabel";
     self.view.backgroundColor = [UIColor whiteColor];
     
-    NSString *str = @"@京东 2014年4月，[/haqian.gif]有网友曝光了一组奶茶妹妹章泽天ss与京东老总刘强东的约会照。 4月7日，刘强东微博Https://www.baidu.com/s?cl=3&tn=baidutop10&fr=top1000&wd=%E5%AD%A6%E7%94%9F%E5%90%88%E5%94%B1%E8%87%B4%E8%88%9E%E5%8F%B0%E5%9D%8D%E5%A1%8C&rsv_idx=2发声，称“我们每个人都有选择和决定自己生活的权利。小天是我见过最单纯善良的人，很遗憾自己没能保护好她。感谢大家关心，只求以后可以正常牵手而行。@奶茶妹妹 [/haha] #开心时刻#”[/haha.gif]";
+    //    NSString *str = @"@京东 2014年4月，[/haqian.gif]有网友曝光了一组奶茶妹妹章泽天ss与京东老总刘强东的约会照。 4月7日，刘强东微博Https://www.baidu.com/s?cl=3&tn=baidutop10&fr=top1000&wd=%E5%AD%A6%E7%94%9F%E5%90%88%E5%94%B1%E8%87%B4%E8%88%9E%E5%8F%B0%E5%9D%8D%E5%A1%8C&rsv_idx=2发声，称“我们每个人都有选择和决定自己生活的权利。小天是我见过最单纯善良的人，很遗憾自己没能保护好她。感谢大家关心，只求以后可以正常牵手而行。@奶茶妹妹 [/haha] #开心时刻#”[/haha.gif]";
+    
+    NSString *str = @"<a href = http://www.789.com>789</a><img src=\"http://123.123.com\">www.000.com www.000.com <a href = http://www.789.com>789</a> www.000.com www.000.com";
     
     _label = [[TLAttributedLabel alloc] initWithFrame:CGRectMake(10, 100, [UIScreen mainScreen].bounds.size.width - 20, 400)];
     _label.delegate = self;
-//    _label.numberOfLines = 6;
-//    _label.showUrl = YES;
+    //    _label.numberOfLines = 6;
+    //    _label.showUrl = YES;
     [_label setText:str];
     _label.imageSize = CGSizeMake(20, 20);
     [_label addCustomLink:@"刘强东"];

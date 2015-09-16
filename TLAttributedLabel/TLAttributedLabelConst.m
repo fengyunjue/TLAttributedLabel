@@ -15,7 +15,7 @@ NSString *const TLPictureBeginFlag = @"[/";
 NSString *const TLPictureEndFlag   = @"]";
 
 // 替换url的链接文字和图片
-NSString *const TLReplaceURLTitle     = @"网页链接";
+NSString *const TLReplaceURLTitle     = @"查看图片";
 NSString *const TLReplaceURLImageName = @"timeline_card_small_web";
 
 // 获取网络图片的替换图片
